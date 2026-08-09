@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Citations du Jour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;1,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky-top:#5FB8F5;
+    --sky-mid:#9AD6FA;
+    --sky-bottom:#DFF3FE;
+    --cloud:#FFFFFF;
+    --sun:#FFD166;
+    --ink:#1B3A4B;
+    --ink-soft:#3F6478;
+    --affirmation:#3FC1B0;
+    --motivation:#FF8C69;
+    --gratitude:#F0A84E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:'Nunito',sans-serif;
+    min-height:100vh;
+    overflow-x:hidden;
+    background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-mid) 45%,var(--sky-bottom) 100%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    padding:24px;
+  }
+
+  .sun{
+    position:absolute;
+    top:8%;
+    right:12%;
+    width:120px;
+    height:120px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #FFE29A 0%, var(--sun) 55%, rgba(255,209,102,0) 75%);
+    box-shadow:0 0 60px 20px rgba(255,209,102,0.45);
+    animation:pulse 6s ease-in-out infinite;
+    z-index:0;
+  }
+  @keyframes pulse{
+    0%,100%{transform:scale(1);opacity:0.95;}
+    50%{transform:scale(1.06);opacity:1;}
+  }
+
+  .cloud{
+    position:absolute;
+    background:var(--cloud);
+    border-radius:100px;
+    opacity:0.9;
+    filter:drop-shadow(0 8px 12px rgba(27,58,75,0.08));
+    z-index:0;
+  }
+  .cloud::before, .cloud::after{
+    content:"";
+    position:absolute;
+    background:var(--cloud);
+    border-radius:50%;
+  }
+  .cloud1{width:140px;height:50px;top:12%;left:-160px;animation:drift1 46s linear infinite;}
+  .cloud1::before{width:70px;height:70px;top:-35px;left:20px;}
+  .cloud1::after{width:50px;height:50px;top:-22px;left:80px;}
+
+  .cloud2{width:100px;height:38px;top:24%;left:-140px;animation:drift2 34s linear infinite;animation-delay:-8s;opacity:0.75;}
+  .cloud2::before{width:50px;height:50px;top:-24px;left:15px;}
+  .cloud2::after{width:36px;height:36px;top:-16px;left:56px;}
+
+  .cloud3{width:170px;height:60px;top:70%;left:-200px;animation:drift1 58s linear infinite;animation-delay:-20s;opacity:0.85;}
+  .cloud3::before{width:80px;height:80px;top:-40px;left:25px;}
+  .cloud3::after{width:60px;height:60px;top:-28px;left:95px;}
+
+  .cloud4{width:90px;height:34px;top:82%;left:-120px;animation:drift2 40s linear infinite;animation-delay:-14s;opacity:0.65;}
+  .cloud4::before{width:44px;height:44px;top:-22px;left:12px;}
+  .cloud4::after{width:32px;height:32px;top:-14px;left:50px;}
+
+  @keyframes drift1{ from{transform:translateX(0);} to{transform:translateX(calc(100vw + 300px));} }
+  @keyframes drift2{ from{transform:translateX(0);} to{transform:translateX(calc(100vw + 260px));} }
+
+  @media (prefers-reduced-motion: reduce){
+    .cloud1,.cloud2,.cloud3,.cloud4,.sun{animation:none;}
+  }
+
+  .app{
+    position:relative;
+    z-index:2;
+    width:100%;
+    max-width:560px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+  }
+
+  .tabs{
+    display:flex;
+    gap:8px;
+    background:rgba(255,255,255,0.55);
+    padding:5px;
+    border-radius:999px;
+    backdrop-filter:blur(8px);
+  }
+  .tab-btn{
+    background:transparent;
+    border:none;
+    padding:8px 18px;
+    border-radius:999px;
+    font-family:'Nunito',sans-serif;
+    font-weight:700;
+    font-size:13px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .tab-btn.active{background:var(--ink);color:#fff;}
+
+  .card{
+    width:100%;
+    background:rgba(255,255,255,0.72);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    border-radius:36px;
+    border:1px solid rgba(255,255,255,0.9);
+    box-shadow:0 20px 50px -12px rgba(27,58,75,0.25);
+    padding:36px 32px 26px;
+    text-align:center;
+    animation:rise 0.7s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes rise{ from{opacity:0;transform:translateY(18px);} to{opacity:1;transform:translateY(0);} }
+
+  .date{
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:16px;
+  }
+
+  .badge{
+    display:inline-block;
+    font-family:'Baloo 2',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    padding:6px 18px;
+    border-radius:999px;
+    color:#fff;
+    margin-bottom:20px;
+    letter-spacing:0.03em;
+  }
+  .badge.affirmation{background:var(--affirmation);}
+  .badge.motivation{background:var(--motivation);}
+  .badge.gratitude{background:var(--gratitude);}
+
+  .quote{
+    font-family:'Baloo 2',sans-serif;
+    font-weight:600;
+    font-size:clamp(22px,4.2vw,30px);
+    line-height:1.35;
+    color:var(--ink);
+    margin:0 0 22px;
+    min-height:110px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:opacity 0.25s ease;
+  }
+  .app.font-large .quote{ font-size:clamp(26px,5.2vw,38px); }
+  .quote.fade{opacity:0;}
+  .quote::before{content:"“";}
+  .quote::after{content:"”";}
+
+  .actions{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .settings-row{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+
+  button{
+    font-family:'Nunito',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    border:none;
+    border-radius:999px;
+    padding:11px 20px;
+    cursor:pointer;
+    transition:transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  button:focus-visible{ outline:3px solid #1B3A4B; outline-offset:2px; }
+  .btn-primary{ background:var(--ink); color:#fff; box-shadow:0 8px 18px -6px rgba(27,58,75,0.5); }
+  .btn-primary:hover{ transform:translateY(-2px); box-shadow:0 12px 22px -6px rgba(27,58,75,0.55); }
+  .btn-ghost{ background:transparent; color:var(--ink-soft); border:1.5px solid rgba(27,58,75,0.25); }
+  .btn-ghost:hover{ background:rgba(27,58,75,0.06); }
+  .btn-icon{ background:rgba(255,255,255,0.6); color:var(--ink); border:1.5px solid rgba(27,58,75,0.15); padding:10px 14px; }
+  .btn-icon.on{ background:var(--ink); color:#fff; }
+
+  .footer-note{ margin-top:16px; font-size:11.5px; color:var(--ink-soft); opacity:0.85; line-height:1.5; }
+
+  .reminder-panel{
+    margin-top:14px;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  .reminder-panel.open{ display:flex; }
+  .reminder-panel input[type="time"]{
+    border-radius:999px;
+    border:1.5px solid rgba(27,58,75,0.2);
+    padding:6px 12px;
+    font-family:'Nunito',sans-serif;
+    font-weight:700;
+    color:var(--ink);
+    background:#fff;
+  }
+
+  /* Calendar view */
+  .calendar-card{
+    width:100%;
+    background:rgba(255,255,255,0.72);
+    backdrop-filter:blur(14px);
+    border-radius:32px;
+    border:1px solid rgba(255,255,255,0.9);
+    box-shadow:0 20px 50px -12px rgba(27,58,75,0.25);
+    padding:26px 24px;
+    display:none;
+  }
+  .calendar-card.open{ display:block; }
+  .calendar-title{
+    font-family:'Baloo 2',sans-serif;
+    font-weight:700;
+    font-size:16px;
+    color:var(--ink);
+    margin:0 0 14px;
+    text-align:center;
+  }
+  .calendar-grid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:6px;
+  }
+  .cal-day{
+    aspect-ratio:1;
+    border-radius:12px;
+    background:rgba(255,255,255,0.5);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    font-weight:700;
+    color:var(--ink-soft);
+    cursor:default;
+    position:relative;
+  }
+  .cal-day.has-quote{ cursor:pointer; color:var(--ink); }
+  .cal-day.has-quote:hover{ background:rgba(255,255,255,0.9); }
+  .cal-dot{ width:7px; height:7px; border-radius:50%; margin-top:3px; }
+  .cal-dot.affirmation{ background:var(--affirmation); }
+  .cal-dot.motivation{ background:var(--motivation); }
+  .cal-dot.gratitude{ background:var(--gratitude); }
+  .cal-empty{ opacity:0.35; }
+
+  .cal-preview{
+    margin-top:14px;
+    padding:14px 16px;
+    background:rgba(255,255,255,0.6);
+    border-radius:16px;
+    font-size:14px;
+    color:var(--ink);
+    text-align:center;
+    display:none;
+  }
+  .cal-preview.open{ display:block; }
+
+  .status{
+    position:fixed;
+    bottom:16px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:12px;
+    color:var(--ink-soft);
+    background:rgba(255,255,255,0.75);
+    padding:6px 14px;
+    border-radius:999px;
+    z-index:5;
+    display:none;
+  }
+</style>
+</head>
+<body>
+
+<div class="sun"></div>
+<div class="cloud cloud1"></div>
+<div class="cloud cloud2"></div>
+<div class="cloud cloud3"></div>
+<div class="cloud cloud4"></div>
+
+<div class="app" id="app">
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-today">Aujourd'hui</button>
+    <button class="tab-btn" id="tab-calendar">Calendrier</button>
+  </div>
+
+  <div class="card" id="today-card">
+    <div class="date" id="date"></div>
+    <div class="badge" id="badge">Chargement…</div>
+    <p class="quote" id="quote">Un instant de calme avant l'inspiration</p>
+
+    <div class="actions">
+      <button class="btn-primary" id="refresh-btn">Nouvelle citation</button>
+      <button class="btn-icon" id="share-btn" title="Partager" aria-label="Partager la citation">↗ Partager</button>
+    </div>
+    <div class="settings-row">
+      <button class="btn-icon" id="font-btn" title="Agrandir le texte" aria-label="Agrandir le texte">A+</button>
+      <button class="btn-icon" id="notif-btn" title="Rappel quotidien" aria-label="Activer le rappel quotidien">🔔 Rappel</button>
+      <button class="btn-ghost" id="reset-btn">Réinitialiser</button>
+    </div>
+
+    <div class="reminder-panel" id="reminder-panel">
+      <label for="reminder-time">Heure du rappel :</label>
+      <input type="time" id="reminder-time" value="09:00">
+    </div>
+
+    <div class="footer-note">Une citation par jour, jamais deux fois la même tant qu'il en reste de nouvelles. Le rappel fonctionne pendant que cette page reste ouverte dans le navigateur.</div>
+  </div>
+
+  <div class="calendar-card" id="calendar-card">
+    <p class="calendar-title" id="calendar-title">Vos 28 derniers jours</p>
+    <div class="calendar-grid" id="calendar-grid"></div>
+    <div class="cal-preview" id="cal-preview"></div>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+const QUOTES = [
+  {t:"affirmation", text:"Je suis capable de faire face à ce que cette journée m'apporte."},
+  {t:"affirmation", text:"Ma valeur ne dépend d'aucune approbation extérieure."},
+  {t:"affirmation", text:"Je choisis la paix plutôt que la précipitation."},
+  {t:"affirmation", text:"Chaque respiration me ramène à l'instant présent."},
+  {t:"affirmation", text:"Je mérite le temps que je prends pour moi-même."},
+  {t:"affirmation", text:"Mes progrès, même petits, comptent vraiment."},
+  {t:"affirmation", text:"J'accueille cette journée avec un esprit ouvert."},
+  {t:"affirmation", text:"Je suis en train de devenir la personne que je veux être."},
+  {t:"affirmation", text:"Ma confiance grandit à chaque pas que je fais."},
+  {t:"affirmation", text:"Je peux être fier de mon chemin, pas seulement de ma destination."},
+  {t:"affirmation", text:"Je m'autorise à recommencer autant de fois qu'il le faut."},
+  {t:"affirmation", text:"Ma sensibilité est une force, pas une faiblesse."},
+  {t:"affirmation", text:"Je fais de mon mieux avec ce que j'ai aujourd'hui."},
+  {t:"affirmation", text:"Je suis digne de repos autant que de réussite."},
+  {t:"affirmation", text:"Mes erreurs sont des preuves que j'essaie vraiment."},
+  {t:"affirmation", text:"Je peux poser des limites sans culpabiliser."},
+  {t:"affirmation", text:"Ce que je ressens aujourd'hui ne définit pas demain."},
+  {t:"affirmation", text:"Je suis capable d'apprendre de tout ce qui m'arrive."},
+  {t:"affirmation", text:"J'ai le droit d'avancer à mon propre rythme."},
+  {t:"affirmation", text:"Je suis reconnaissant pour ce que cette journée m'offre déjà."},
+  {t:"affirmation", text:"Ma tranquillité intérieure ne dépend pas des circonstances."},
+  {t:"affirmation", text:"Je fais confiance à ma capacité à traverser les obstacles."},
+  {t:"affirmation", text:"Chaque jour est une nouvelle occasion de faire un pas de plus."},
+  {t:"affirmation", text:"Je suis plus résilient que je ne le pense."},
+  {t:"affirmation", text:"Je peux ralentir sans me sentir en retard."},
+
+  {t:"motivation", text:"Le premier pas est toujours le plus courageux, alors fais-le maintenant."},
+  {t:"motivation", text:"Une petite action aujourd'hui vaut mieux qu'un grand projet remis à demain."},
+  {t:"motivation", text:"Ta constance compte plus que ta vitesse."},
+  {t:"motivation", text:"Les journées ordinaires construisent les réussites extraordinaires."},
+  {t:"motivation", text:"Avance, même lentement : l'important est de ne pas t'arrêter."},
+  {t:"motivation", text:"Ce que tu fais aujourd'hui prépare ce que tu vivras demain."},
+  {t:"motivation", text:"La discipline d'aujourd'hui est la liberté de demain."},
+  {t:"motivation", text:"Chaque effort que tu fournis laisse une trace, même invisible."},
+  {t:"motivation", text:"Ne compare pas ton chapitre 3 au chapitre 20 de quelqu'un d'autre."},
+  {t:"motivation", text:"Le doute est normal, l'abandon est un choix : choisis autrement."},
+  {t:"motivation", text:"Tu n'as pas besoin d'être parfait pour commencer, juste sincère."},
+  {t:"motivation", text:"Un objectif clair transforme l'énergie dispersée en résultats."},
+  {t:"motivation", text:"Les obstacles d'aujourd'hui sont les compétences de demain."},
+  {t:"motivation", text:"Fais un pas, même petit : le mouvement crée la motivation."},
+  {t:"motivation", text:"Ta version d'hier serait fière de voir jusqu'où tu es allé."},
+  {t:"motivation", text:"Le succès se construit dans les jours où personne ne regarde."},
+  {t:"motivation", text:"Ce n'est pas le talent qui gagne, c'est la régularité."},
+  {t:"motivation", text:"Chaque tentative te rapproche, même celle qui échoue."},
+  {t:"motivation", text:"Ton énergie suit ton attention : choisis où tu la places."},
+  {t:"motivation", text:"Fixe-toi un cap simple, et avance vers lui aujourd'hui."},
+  {t:"motivation", text:"La motivation suit souvent l'action, pas l'inverse : commence."},
+  {t:"motivation", text:"Un jour à la fois suffit pour construire une vie entière."},
+  {t:"motivation", text:"Ce que tu répètes devient qui tu es : choisis bien tes habitudes."},
+  {t:"motivation", text:"Les grandes réussites commencent toujours par une décision simple."},
+  {t:"motivation", text:"Ton meilleur jour n'est pas encore passé, il commence maintenant."},
+
+  {t:"gratitude", text:"Je suis reconnaissant pour ce toit, cette chaleur, ce moment de calme."},
+  {t:"gratitude", text:"Merci à mon corps qui me porte, même dans les jours difficiles."},
+  {t:"gratitude", text:"Je remarque aujourd'hui trois petites choses qui m'ont fait sourire."},
+  {t:"gratitude", text:"Je suis reconnaissant pour les personnes qui croient en moi."},
+  {t:"gratitude", text:"Chaque leçon apprise mérite ma gratitude, même les plus dures."},
+  {t:"gratitude", text:"Je remercie le temps que j'ai eu aujourd'hui, si court soit-il."},
+  {t:"gratitude", text:"Je suis reconnaissant pour un repas partagé, une parole gentille."},
+  {t:"gratitude", text:"Merci à cette version de moi qui n'a jamais abandonné."},
+  {t:"gratitude", text:"Je savoure la beauté simple d'un ciel qui change de couleur."},
+  {t:"gratitude", text:"Je suis reconnaissant pour le confort d'un endroit que j'appelle chez moi."},
+  {t:"gratitude", text:"Merci pour les rires, même brefs, qui allègent une journée lourde."},
+  {t:"gratitude", text:"Je suis reconnaissant d'avoir encore la force de recommencer."},
+  {t:"gratitude", text:"Chaque petite aide reçue aujourd'hui mérite d'être remarquée."},
+  {t:"gratitude", text:"Je suis reconnaissant pour ma capacité à ressentir et à aimer."},
+  {t:"gratitude", text:"Merci à ce moment de silence qui m'a permis de respirer."},
+  {t:"gratitude", text:"Je suis reconnaissant pour les erreurs qui m'ont rendu plus sage."},
+  {t:"gratitude", text:"Je remercie les personnes qui m'ont tendu la main sans rien demander."},
+  {t:"gratitude", text:"Je suis reconnaissant pour la curiosité qui m'anime encore."},
+  {t:"gratitude", text:"Merci pour cette journée, avec ses hauts et ses bas, elle était mienne."},
+  {t:"gratitude", text:"Je suis reconnaissant pour le simple fait d'être encore en chemin."}
+];
+
+const STORAGE_KEY = "citations-du-jour-state";
+const dateEl = document.getElementById("date");
+const badgeEl = document.getElementById("badge");
+const quoteEl = document.getElementById("quote");
+const statusEl = document.getElementById("status");
+const refreshBtn = document.getElementById("refresh-btn");
+const resetBtn = document.getElementById("reset-btn");
+const shareBtn = document.getElementById("share-btn");
+const fontBtn = document.getElementById("font-btn");
+const notifBtn = document.getElementById("notif-btn");
+const reminderPanel = document.getElementById("reminder-panel");
+const reminderTimeInput = document.getElementById("reminder-time");
+const appEl = document.getElementById("app");
+
+const tabToday = document.getElementById("tab-today");
+const tabCalendar = document.getElementById("tab-calendar");
+const todayCard = document.getElementById("today-card");
+const calendarCard = document.getElementById("calendar-card");
+const calendarGrid = document.getElementById("calendar-grid");
+const calPreview = document.getElementById("cal-preview");
+
+let reminderTimer = null;
+
+function todayStr(d = new Date()){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function formatDateFR(){
+  return new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
+}
+function showStatus(msg){
+  statusEl.textContent = msg;
+  statusEl.style.display = "block";
+  setTimeout(()=>{ statusEl.style.display = "none"; }, 2400);
+}
+
+function pickUnseenIndex(seenIds){
+  let available = QUOTES.map((_,i)=>i).filter(i => !seenIds.includes(i));
+  if(available.length === 0){
+    available = QUOTES.map((_,i)=>i);
+    seenIds = [];
+  }
+  const idx = available[Math.floor(Math.random()*available.length)];
+  return { idx, seenIds };
+}
+
+function renderQuote(index){
+  const q = QUOTES[index];
+  quoteEl.classList.add("fade");
+  setTimeout(()=>{
+    quoteEl.textContent = q.text;
+    badgeEl.textContent = q.t === "affirmation" ? "Affirmation" : q.t === "motivation" ? "Motivation" : "Gratitude";
+    badgeEl.className = "badge " + q.t;
+    quoteEl.classList.remove("fade");
+  }, 200);
+}
+
+async function loadState(){
+  try{
+    const result = await window.storage.get(STORAGE_KEY, false);
+    return result ? JSON.parse(result.value) : null;
+  }catch(err){ return null; }
+}
+async function saveState(state){
+  try{
+    const result = await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    if(!result) showStatus("Sauvegarde impossible pour le moment");
+  }catch(err){ showStatus("Sauvegarde impossible pour le moment"); }
+}
+
+function currentState(){ return window.__state; }
+function setCurrentState(s){ window.__state = s; }
+
+async function init(){
+  dateEl.textContent = formatDateFR();
+  let state = await loadState();
+  const today = todayStr();
+
+  if(!state){
+    const { idx, seenIds } = pickUnseenIndex([]);
+    state = { currentIndex: idx, seenIds:[...seenIds, idx], lastDate: today, history:{[today]:idx}, fontLarge:false, reminderHour:null, reminderFiredDate:null };
+    renderQuote(idx);
+    await saveState(state);
+  } else {
+    state.history = state.history || {};
+    if(state.lastDate !== today){
+      const { idx, seenIds } = pickUnseenIndex(state.seenIds || []);
+      state = { ...state, currentIndex: idx, seenIds:[...seenIds, idx], lastDate: today, history:{...state.history, [today]:idx} };
+      renderQuote(idx);
+      await saveState(state);
+    } else {
+      renderQuote(state.currentIndex);
+    }
+  }
+  setCurrentState(state);
+  applyFontPref(state.fontLarge);
+  if(state.reminderHour){
+    reminderTimeInput.value = state.reminderHour;
+    reminderPanel.classList.add("open");
+    notifBtn.classList.add("on");
+    startReminderLoop();
+  }
+  buildCalendar();
+}
+
+refreshBtn.addEventListener("click", async ()=>{
+  refreshBtn.disabled = true;
+  let state = currentState() || (await loadState()) || { seenIds:[], history:{}, lastDate:todayStr() };
+  const { idx, seenIds } = pickUnseenIndex(state.seenIds || []);
+  const today = todayStr();
+  state = { ...state, currentIndex: idx, seenIds:[...seenIds, idx], lastDate: today, history:{...(state.history||{}), [today]:idx} };
+  renderQuote(idx);
+  setCurrentState(state);
+  await saveState(state);
+  buildCalendar();
+  refreshBtn.disabled = false;
+});
+
+resetBtn.addEventListener("click", async ()=>{
+  resetBtn.disabled = true;
+  const { idx } = pickUnseenIndex([]);
+  const today = todayStr();
+  const prev = currentState() || {};
+  const state = { currentIndex: idx, seenIds:[idx], lastDate: today, history:{[today]:idx}, fontLarge: prev.fontLarge||false, reminderHour: prev.reminderHour||null, reminderFiredDate:null };
+  renderQuote(idx);
+  setCurrentState(state);
+  await saveState(state);
+  buildCalendar();
+  showStatus("Historique réinitialisé");
+  resetBtn.disabled = false;
+});
+
+shareBtn.addEventListener("click", async ()=>{
+  const text = quoteEl.textContent;
+  if(navigator.share){
+    try{ await navigator.share({ text: text }); }
+    catch(err){ /* annulé par l'utilisateur, on ne fait rien */ }
+  } else if(navigator.clipboard){
+    try{ await navigator.clipboard.writeText(text); showStatus("Citation copiée !"); }
+    catch(err){ showStatus("Impossible de copier"); }
+  } else {
+    showStatus("Partage non disponible sur cet appareil");
+  }
+});
+
+function applyFontPref(large){
+  appEl.classList.toggle("font-large", !!large);
+  fontBtn.classList.toggle("on", !!large);
+}
+fontBtn.addEventListener("click", async ()=>{
+  let state = currentState() || {};
+  const large = !state.fontLarge;
+  state = { ...state, fontLarge: large };
+  setCurrentState(state);
+  applyFontPref(large);
+  await saveState(state);
+});
+
+notifBtn.addEventListener("click", async ()=>{
+  if(!("Notification" in window)){
+    showStatus("Notifications non disponibles ici");
+    return;
+  }
+  let state = currentState() || {};
+  if(state.reminderHour){
+    // désactiver
+    state = { ...state, reminderHour: null };
+    reminderPanel.classList.remove("open");
+    notifBtn.classList.remove("on");
+    stopReminderLoop();
+    setCurrentState(state);
+    await saveState(state);
+    showStatus("Rappel désactivé");
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if(permission !== "granted"){
+    showStatus("Autorisation refusée");
+    return;
+  }
+  const hour = reminderTimeInput.value || "09:00";
+  state = { ...state, reminderHour: hour, reminderFiredDate: null };
+  reminderPanel.classList.add("open");
+  notifBtn.classList.add("on");
+  setCurrentState(state);
+  await saveState(state);
+  startReminderLoop();
+  new Notification("Rappel activé 🔔", { body: "Vous recevrez votre citation chaque jour à " + hour + " (pendant que cette page reste ouverte)." });
+});
+
+reminderTimeInput.addEventListener("change", async ()=>{
+  let state = currentState() || {};
+  if(!state.reminderHour) return;
+  state = { ...state, reminderHour: reminderTimeInput.value };
+  setCurrentState(state);
+  await saveState(state);
+  showStatus("Heure du rappel mise à jour");
+});
+
+function startReminderLoop(){
+  stopReminderLoop();
+  reminderTimer = setInterval(async ()=>{
+    const state = currentState();
+    if(!state || !state.reminderHour) return;
+    const now = new Date();
+    const hhmm = String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+    const today = todayStr();
+    if(hhmm === state.reminderHour && state.reminderFiredDate !== today){
+      const q = QUOTES[state.currentIndex];
+      if(Notification.permission === "granted"){
+        new Notification("Votre citation du jour", { body: q ? q.text : "" });
+      }
+      const updated = { ...state, reminderFiredDate: today };
+      setCurrentState(updated);
+      await saveState(updated);
+    }
+  }, 30000);
+}
+function stopReminderLoop(){
+  if(reminderTimer){ clearInterval(reminderTimer); reminderTimer = null; }
+}
+
+tabToday.addEventListener("click", ()=>{
+  tabToday.classList.add("active");
+  tabCalendar.classList.remove("active");
+  todayCard.style.display = "block";
+  calendarCard.classList.remove("open");
+});
+tabCalendar.addEventListener("click", ()=>{
+  tabCalendar.classList.add("active");
+  tabToday.classList.remove("active");
+  todayCard.style.display = "none";
+  calendarCard.classList.add("open");
+  buildCalendar();
+});
+
+function buildCalendar(){
+  const state = currentState();
+  const history = (state && state.history) || {};
+  calendarGrid.innerHTML = "";
+  calPreview.classList.remove("open");
+  const days = [];
+  for(let i=27;i>=0;i--){
+    const d = new Date();
+    d.setDate(d.getDate()-i);
+    days.push(d);
+  }
+  days.forEach(d=>{
+    const key = todayStr(d);
+    const idx = history[key];
+    const cell = document.createElement("div");
+    cell.className = "cal-day" + (idx !== undefined ? " has-quote" : " cal-empty");
+    const num = document.createElement("span");
+    num.textContent = d.getDate();
+    cell.appendChild(num);
+    if(idx !== undefined){
+      const dot = document.createElement("div");
+      dot.className = "cal-dot " + QUOTES[idx].t;
+      cell.appendChild(dot);
+      cell.addEventListener("click", ()=>{
+        calPreview.textContent = d.toLocaleDateString("fr-FR",{ day:"numeric", month:"long" }) + " — " + QUOTES[idx].text;
+        calPreview.classList.add("open");
+      });
+    }
+    calendarGrid.appendChild(cell);
+  });
+}
+
+init();
+</script>
+</body>
+</html>

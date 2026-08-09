@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SaaS-Meter — L'Indice d'Authenticité Startup | IAtech</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #07070F; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Dépendances : React, ReactDOM, Recharts (dataviz), Babel (transpilation JSX en direct) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script>
+  // Repli de stockage local (window.storage n'existe que dans l'environnement Claude.ai).
+  // En dehors de Claude.ai, l'historique et le "Mur de la Honte" sont sauvegardés dans le
+  // localStorage du navigateur — donc propres à chaque visiteur, pas réellement partagés.
+  if (!window.storage) {
+    window.storage = {
+      async get(key, shared) {
+        const ns = shared ? "shared" : "personal";
+        const raw = localStorage.getItem("sm_" + ns + "_" + key);
+        if (raw === null) throw new Error("not found");
+        return { key, value: raw, shared: !!shared };
+      },
+      async set(key, value, shared) {
+        const ns = shared ? "shared" : "personal";
+        localStorage.setItem("sm_" + ns + "_" + key, value);
+        return { key, value, shared: !!shared };
+      },
+      async delete(key, shared) {
+        const ns = shared ? "shared" : "personal";
+        localStorage.removeItem("sm_" + ns + "_" + key);
+        return { key, deleted: true, shared: !!shared };
+      },
+      async list(prefix, shared) {
+        const ns = shared ? "shared" : "personal";
+        const p = "sm_" + ns + "_" + (prefix || "");
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf(p) === 0) keys.push(k.slice(("sm_" + ns + "_").length));
+        }
+        return { keys, prefix, shared: !!shared };
+      }
+    };
+  }
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback, useRef } = React;
+const { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } = Recharts;
+
+const VERDICTS = {
+  authentique: { label: "AUTHENTIQUE", color: "#00D4E8", stamp: "VALIDÉ" },
+  modere: { label: "JARGON MODÉRÉ", color: "#C9A84C", stamp: "RÉSERVE" },
+  vapeur: { label: "VAPORWARE", color: "#B43061", stamp: "SUSPECT" },
+  bingo: { label: "BUZZWORD BINGO", color: "#5C1C39", stamp: "REJETÉ" },
+};
+
+function verdictFromScore(score) {
+  if (score >= 75) return VERDICTS.authentique;
+  if (score >= 50) return VERDICTS.modere;
+  if (score >= 25) return VERDICTS.vapeur;
+  return VERDICTS.bingo;
+}
+
+const SYSTEM_PROMPT = `Tu es un auditeur satirique spécialisé dans le décodage du jargon startup et corporate.
+On te donne une URL ou un nom d'entreprise. Utilise l'outil web_search pour trouver la landing page,
+la description, le pitch, ou des articles de presse à propos de cette entreprise, et repère les buzzwords
+vides de sens ("AI-powered", "revolutionary ecosystem", "paradigm shift", "disruptive synergy", etc.),
+les promesses vagues, et le jargon corporate.
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans backticks, sans markdown, sans texte avant ou après,
+selon ce schéma exact :
+{
+  "company_name": string,
+  "found_content": boolean,
+  "honesty_score": number (0-100, 0 = pur buzzword bingo, 100 = discours limpide et concret),
+  "sub_scores": {
+    "clarte_discours": number (0-100, 100 = discours clair sans jargon),
+    "preuve_technique": number (0-100, 100 = preuves concrètes : specs, démo, chiffres),
+    "transparence": number (0-100, 100 = infos vérifiables : équipe, tarifs, cas d'usage réels),
+    "promesses_concretes": number (0-100, 100 = promesses mesurables, 0 = promesses vagues type "révolutionne tout")
+  },
+  "buzzwords_detected": [ { "phrase": string, "plain_translation": string (traduction sarcastique en clair), "cringe_level": number (1-5) } ] (3 à 6 entrées si possible),
+  "roast_summary": string (2-3 phrases satiriques mais pas méchantes, ton pince-sans-rire),
+  "shareable_oneliner": string (une punchline courte, percutante, prête à partager sur LinkedIn/X),
+  "real_talk": string (une phrase honnête sur ce que l'entreprise semble réellement faire, si identifiable, sinon une phrase reconnaissant le manque d'info),
+  "sector_benchmark": string (une phrase comparant ce discours à la moyenne de son secteur, si identifiable, sinon une phrase neutre),
+  "meta_analysis": {
+    "pattern_detected": string (nom court d'un pattern reconnu, ex : "Vaporware classique stade seed", "AI-washing pattern", "Discours mature et concret"),
+    "coherence_score": number (0-100 : cohérence entre le discours marketing et les preuves concrètes trouvées ; 100 = parfaitement cohérent),
+    "risk_flags": [string] (0 à 3 signaux d'alerte courts et factuels, tableau vide si rien à signaler)
+  }
+}
+
+Si tu ne trouves aucune information exploitable, mets found_content à false, honesty_score à 50,
+tous les sub_scores à 50, buzzwords_detected à un tableau vide, meta_analysis.coherence_score à 50,
+meta_analysis.pattern_detected à "Aucune donnée publique exploitable", meta_analysis.risk_flags à un tableau vide,
+et explique dans real_talk que le scan n'a rien trouvé d'exploitable publiquement — reste dans le ton pince-sans-rire.`;
+
+async function callAudit(target) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: `Analyse cette entreprise / URL : ${target}` }],
+      tools: [{ type: "web_search_20250305", name: "web_search" }]
+    })
+  });
+  const data = await response.json();
+  const textBlocks = (data.content || [])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+  const cleaned = textBlocks.replace(/```json|```/g, "").trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Réponse illisible");
+  return JSON.parse(jsonMatch[0]);
+}
+
+function slugify(s) {
+  return (s || "inconnu")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 40);
+}
+
+function radarData(sub) {
+  if (!sub) return [];
+  return [
+    { axis: "Clarté", value: sub.clarte_discours ?? 0 },
+    { axis: "Preuve technique", value: sub.preuve_technique ?? 0 },
+    { axis: "Transparence", value: sub.transparence ?? 0 },
+    { axis: "Promesses concrètes", value: sub.promesses_concretes ?? 0 }
+  ];
+}
+
+function mergedRadarData(subA, subB) {
+  const a = radarData(subA);
+  const b = radarData(subB);
+  return a.map((row, i) => ({ axis: row.axis, A: row.value, B: b[i] ? b[i].value : 0 }));
+}
+
+function globalTrustIndex(rep) {
+  if (!rep || !rep.meta_analysis) return rep ? rep.honesty_score : 0;
+  const coherence = rep.meta_analysis.coherence_score ?? rep.honesty_score;
+  return Math.round(rep.honesty_score * 0.6 + coherence * 0.4);
+}
+
+const inputStyle = {
+  flex: "1 1 220px",
+  background: "#07070F",
+  border: "1px solid rgba(168,193,212,0.4)",
+  color: "#EFECED",
+  padding: "12px 14px",
+  fontFamily: "'Space Mono', monospace",
+  fontSize: 14,
+  outline: "none"
+};
+
+const buttonStyle = (active) => ({
+  background: active ? "#C9A84C" : "transparent",
+  color: active ? "#07070F" : "#C9A84C",
+  border: "1px solid #C9A84C",
+  padding: "9px 16px",
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 700,
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  cursor: "pointer"
+});
+
+function ReportCard({ report, label, accent }) {
+  if (!report) return null;
+  const verdict = verdictFromScore(report.honesty_score);
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(201,168,76,0.35)",
+        background: "rgba(255,255,255,0.02)",
+        padding: 24,
+        position: "relative",
+        flex: "1 1 300px"
+      }}
+      className="sm-card"
+    >
+      {label && (
+        <div style={{ fontSize: 10, letterSpacing: "0.15em", color: accent, marginBottom: 6 }}>
+          {label}
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: "#A8C1D4", letterSpacing: "0.1em" }}>
+        DOSSIER — {report.company_name || "?"}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginTop: 10 }}>
+        <div
+          style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontWeight: 600,
+            fontSize: 56,
+            color: verdict.color,
+            lineHeight: 1
+          }}
+        >
+          {report.honesty_score}
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#A8C1D4" }}>Indice d'Honnêteté /100</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: verdict.color, letterSpacing: "0.06em" }}>
+            {verdict.label}
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 12, height: 6, background: "rgba(255,255,255,0.08)" }}>
+        <div
+          style={{
+            height: "100%",
+            width: `${report.honesty_score}%`,
+            background: verdict.color,
+            transition: "width 0.6s ease"
+          }}
+        />
+      </div>
+      <p
+        style={{
+          marginTop: 16,
+          fontFamily: "'Cormorant Garamond', serif",
+          fontStyle: "italic",
+          fontSize: 16,
+          lineHeight: 1.5,
+          color: "#DFD9DC"
+        }}
+      >
+        {report.roast_summary}
+      </p>
+      {report.sector_benchmark && (
+        <div style={{ marginTop: 10, fontSize: 12, color: "#186DB6" }}>
+          Benchmark secteur : {report.sector_benchmark}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SaasMeter() {
+  const [mode, setMode] = useState("solo"); // solo | battle | mur
+  const [url, setUrl] = useState("");
+  const [urlB, setUrlB] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [report, setReport] = useState(null);
+  const [reportB, setReportB] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [stamped, setStamped] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [wall, setWall] = useState({ shame: [], pantheon: [], loading: false });
+  const [progress, setProgress] = useState(0);
+  const progressTimer = useRef(null);
+
+  const startProgress = useCallback(() => {
+    setProgress(6);
+    clearInterval(progressTimer.current);
+    progressTimer.current = setInterval(() => {
+      setProgress((p) => (p >= 90 ? p : p + (90 - p) * 0.08 + 0.5));
+    }, 220);
+  }, []);
+
+  const finishProgress = useCallback(() => {
+    clearInterval(progressTimer.current);
+    setProgress(100);
+    setTimeout(() => setProgress(0), 500);
+  }, []);
+
+  const abortProgress = useCallback(() => {
+    clearInterval(progressTimer.current);
+    setProgress(0);
+  }, []);
+
+  const verdict = report ? verdictFromScore(report.honesty_score) : null;
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const list = await window.storage.list("hist:", false);
+      if (!list || !list.keys) return;
+      const items = [];
+      for (const key of list.keys.slice(-8).reverse()) {
+        try {
+          const res = await window.storage.get(key, false);
+          if (res) items.push(JSON.parse(res.value));
+        } catch (e) {}
+      }
+      setHistory(items);
+    } catch (e) {}
+  }, []);
+
+  const saveToStorage = useCallback(async (rep, target) => {
+    const ts = Date.now();
+    const entry = {
+      company_name: rep.company_name || target,
+      honesty_score: rep.honesty_score,
+      shareable_oneliner: rep.shareable_oneliner,
+      target,
+      ts
+    };
+    try {
+      await window.storage.set(`hist:${ts}`, JSON.stringify(entry), false);
+      await window.storage.set(`entry:${slugify(rep.company_name || target)}-${ts}`, JSON.stringify(entry), true);
+    } catch (e) {
+      console.error("storage error", e);
+    }
+  }, []);
+
+  const loadWall = useCallback(async () => {
+    setWall((w) => ({ ...w, loading: true }));
+    try {
+      const list = await window.storage.list("entry:", true);
+      const keys = (list && list.keys) || [];
+      const items = [];
+      for (const key of keys.slice(0, 40)) {
+        try {
+          const res = await window.storage.get(key, true);
+          if (res) items.push({ ...JSON.parse(res.value), _key: key });
+        } catch (e) {}
+      }
+      const sorted = [...items].sort((a, b) => a.honesty_score - b.honesty_score);
+      setWall({
+        shame: sorted.slice(0, 5),
+        pantheon: sorted.slice(-5).reverse(),
+        loading: false
+      });
+    } catch (e) {
+      setWall({ shame: [], pantheon: [], loading: false });
+    }
+  }, []);
+
+  async function deleteHistoryEntry(entry) {
+    try {
+      await window.storage.delete(`hist:${entry.ts}`, false);
+      setHistory((h) => h.filter((x) => x.ts !== entry.ts));
+    } catch (e) {
+      console.error("delete failed", e);
+    }
+  }
+
+  async function deleteWallEntry(entry) {
+    if (!window.confirm(`Supprimer "${entry.company_name}" du classement public pour tout le monde ?`)) return;
+    try {
+      const key = entry._key || `entry:${slugify(entry.company_name)}-${entry.ts}`;
+      await window.storage.delete(key, true);
+      loadWall();
+    } catch (e) {
+      console.error("delete failed", e);
+    }
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (mode === "mur") loadWall();
+  }, [mode, loadWall]);
+
+  async function runSolo() {
+    if (!url.trim()) return;
+    setStatus("loading");
+    setReport(null);
+    setStamped(false);
+    setErrorMsg("");
+    startProgress();
+    try {
+      const rep = await callAudit(url.trim());
+      setReport(rep);
+      setStatus("done");
+      finishProgress();
+      setTimeout(() => setStamped(true), 300);
+      await saveToStorage(rep, url.trim());
+      loadHistory();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Le scan a échoué. Réessayez, ou vérifiez l'URL saisie.");
+      setStatus("error");
+      abortProgress();
+    }
+  }
+
+  async function runBattle() {
+    if (!url.trim() || !urlB.trim()) return;
+    setStatus("loading");
+    setReport(null);
+    setReportB(null);
+    setErrorMsg("");
+    startProgress();
+    try {
+      const [repA, repB] = await Promise.all([callAudit(url.trim()), callAudit(urlB.trim())]);
+      setReport(repA);
+      setReportB(repB);
+      setStatus("done");
+      finishProgress();
+      await saveToStorage(repA, url.trim());
+      await saveToStorage(repB, urlB.trim());
+      loadHistory();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Le duel a échoué. Vérifiez les deux entrées et réessayez.");
+      setStatus("error");
+      abortProgress();
+    }
+  }
+
+  const [copied, setCopied] = useState(false);
+
+  function copyReport(rep) {
+    const v = verdictFromScore(rep.honesty_score);
+    const text = `${rep.shareable_oneliner}\n\nIndice d'Honnêteté : ${rep.honesty_score}/100 (${v.label})\nAudité par SaaS-Meter — IAtech`;
+
+    const showCopied = () => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showCopied).catch(() => fallbackCopy(text, showCopied));
+    } else {
+      fallbackCopy(text, showCopied);
+    }
+  }
+
+  function fallbackCopy(text, onSuccess) {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      onSuccess();
+    } catch (e) {
+      console.error("copy failed", e);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#07070F",
+        color: "#EFECED",
+        fontFamily: "'Space Mono', monospace",
+        padding: "48px 20px",
+        position: "relative",
+        overflow: "hidden"
+      }}
+    >
+      <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Space+Mono:wght@400;700&display=swap"
+        rel="stylesheet"
+      />
+      <style>{`
+        .sm-tab { transition: opacity 0.2s ease, background 0.2s ease; }
+        .sm-tab:hover { opacity: 0.82; }
+        .sm-primary-btn { transition: filter 0.2s ease, transform 0.15s ease; }
+        .sm-primary-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+        .sm-outline-btn { transition: background 0.2s ease, transform 0.15s ease; }
+        .sm-outline-btn:hover { transform: translateY(-1px); }
+        .sm-delete { transition: color 0.15s ease, transform 0.15s ease; }
+        .sm-delete:hover { color: #B43061 !important; transform: scale(1.25); }
+        .sm-card { transition: box-shadow 0.3s ease, border-color 0.3s ease; }
+        .sm-card:hover { box-shadow: 0 0 28px rgba(201,168,76,0.07); border-color: rgba(201,168,76,0.55); }
+      `}</style>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(201,168,76,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(201,168,76,0.05) 1px, transparent 1px)",
+          backgroundSize: "38px 38px",
+          pointerEvents: "none"
+        }}
+      />
+
+      <div style={{ maxWidth: 860, margin: "0 auto", position: "relative" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: 12, letterSpacing: "0.35em", color: "#C9A84C", marginBottom: 10, textTransform: "uppercase" }}>
+            IAtech — Support IT/IA · Bureau des Vérifications
+          </div>
+          <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontWeight: 600, fontSize: 44, margin: 0, lineHeight: 1.05 }}>
+            SaaS-Meter
+          </h1>
+          <div style={{ fontSize: 13, color: "#A8C1D4", marginTop: 8 }}>
+            L'Indice d'Authenticité Startup — détecteur de buzzwords Support IT/IA
+          </div>
+        </div>
+
+        {/* onglets */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 20, flexWrap: "wrap" }}>
+          <button className="sm-tab" style={buttonStyle(mode === "solo")} onClick={() => setMode("solo")}>Scanner</button>
+          <button className="sm-tab" style={buttonStyle(mode === "battle")} onClick={() => setMode("battle")}>Mode Battle</button>
+          <button className="sm-tab" style={buttonStyle(mode === "mur")} onClick={() => setMode("mur")}>Mur de la Honte</button>
+        </div>
+
+        {/* SOLO */}
+        {mode === "solo" && (
+          <>
+            <div style={{ border: "1px solid rgba(201,168,76,0.35)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
+              <label style={{ display: "block", fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#A8C1D4", marginBottom: 8 }}>
+                URL ou nom de l'entreprise à auditer
+              </label>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSolo()} placeholder="ex : quantumleap-ai.com" style={inputStyle} />
+                <button className="sm-primary-btn" onClick={runSolo} disabled={status === "loading" || !url.trim()} style={{ background: status === "loading" ? "rgba(201,168,76,0.3)" : "#C9A84C", color: "#07070F", border: "none", padding: "12px 22px", fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase", cursor: status === "loading" ? "wait" : "pointer" }}>
+                  {status === "loading" ? "Analyse…" : "Lancer l'audit"}
+                </button>
+              </div>
+              {progress > 0 && (
+                <div style={{ marginTop: 12, height: 3, background: "rgba(255,255,255,0.08)" }}>
+                  <div style={{ height: "100%", width: `${progress}%`, background: "#00D4E8", transition: "width 0.25s ease" }} />
+                </div>
+              )}
+              {status === "error" && <div style={{ marginTop: 12, fontSize: 13, color: "#B43061" }}>{errorMsg}</div>}
+            </div>
+
+            {report && verdict && (
+              <div className="sm-card" style={{ marginTop: 32, border: "1px solid rgba(201,168,76,0.35)", background: "rgba(255,255,255,0.02)", padding: 32, position: "relative" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12, color: "#A8C1D4", letterSpacing: "0.1em" }}>DOSSIER — {report.company_name || url}</div>
+                  <div style={{ border: `1px solid ${verdict.color}`, color: verdict.color, padding: "4px 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", opacity: stamped ? 1 : 0, transition: "opacity 0.3s ease" }}>
+                    {verdict.stamp}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 10 }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600, fontSize: 72, color: verdict.color, lineHeight: 1 }}>
+                    {report.honesty_score}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#A8C1D4" }}>Indice d'Honnêteté / 100</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: verdict.color, letterSpacing: "0.08em" }}>{verdict.label}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 16, height: 6, background: "rgba(255,255,255,0.08)", position: "relative" }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${report.honesty_score}%`, background: verdict.color, transition: "width 0.6s ease" }} />
+                </div>
+
+                {report.meta_analysis && (
+                  <div
+                    style={{
+                      marginTop: 24,
+                      padding: "16px 18px",
+                      border: "1px solid rgba(0,212,232,0.3)",
+                      background: "rgba(0,212,232,0.04)"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                      <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#00D4E8" }}>
+                        Analyse Approfondie — Indice de Confiance
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "#00D4E8", fontFamily: "'Cormorant Garamond', serif" }}>
+                        {globalTrustIndex(report)}/100
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 13, color: "#DFD9DC" }}>
+                      Pattern détecté : <strong>{report.meta_analysis.pattern_detected}</strong>
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#A8C1D4" }}>
+                      Cohérence discours / preuves : {report.meta_analysis.coherence_score}/100
+                    </div>
+                    {report.meta_analysis.risk_flags && report.meta_analysis.risk_flags.length > 0 && (
+                      <ul style={{ marginTop: 10, paddingLeft: 18, fontSize: 12, color: "#B43061" }}>
+                        {report.meta_analysis.risk_flags.map((flag, i) => (
+                          <li key={i} style={{ marginBottom: 4 }}>{flag}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <p style={{ marginTop: 24, fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: "#DFD9DC" }}>
+                  {report.roast_summary}
+                </p>
+
+                {report.sub_scores && (
+                  <div style={{ marginTop: 28, height: 260 }}>
+                    <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C", marginBottom: 8 }}>
+                      Décomposition de l'indice
+                    </div>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={radarData(report.sub_scores)} outerRadius="70%">
+                        <PolarGrid stroke="rgba(168,193,212,0.25)" />
+                        <PolarAngleAxis dataKey="axis" tick={{ fill: "#A8C1D4", fontSize: 11 }} />
+                        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                        <Radar dataKey="value" stroke="#00D4E8" fill="#00D4E8" fillOpacity={0.25} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {report.buzzwords_detected && report.buzzwords_detected.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C", marginBottom: 12 }}>
+                      Pièces à conviction
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {report.buzzwords_detected.map((b, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 16, borderBottom: "1px dashed rgba(168,193,212,0.25)", paddingBottom: 8, fontSize: 13 }}>
+                          <span style={{ color: "#B43061", textDecoration: "line-through" }}>"{b.phrase}"</span>
+                          <span style={{ color: "#A8C1D4", textAlign: "right", flex: 1 }}>→ {b.plain_translation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 24, borderLeft: "2px solid #186DB6", paddingLeft: 14, fontSize: 13, color: "#A8C1D4" }}>
+                  {report.real_talk}
+                </div>
+
+                {report.sector_benchmark && (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#186DB6" }}>
+                    Benchmark secteur : {report.sector_benchmark}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 24, padding: 16, background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.25)", fontSize: 14, fontStyle: "italic" }}>
+                  "{report.shareable_oneliner}"
+                </div>
+
+                {report.honesty_score < 50 && (
+                  <div style={{ marginTop: 20, borderTop: "1px solid rgba(201,168,76,0.2)", paddingTop: 14 }}>
+                    <div style={{ fontSize: 12, color: "#5C1C39", marginBottom: 12 }}>
+                      Trop de "AI-powered" sans preuve technique derrière ? C'est souvent le premier symptôme
+                      d'un vrai risque d'AI-washing réglementaire — sujet distinct de ce scan satirique, mais bien réel côté EU AI Act.
+                    </div>
+                    <a
+                      className="sm-primary-btn"
+                      href="https://calendly.com/orlay?utm_source=saas-meter&utm_medium=cta&utm_campaign=ai-washing"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-block",
+                        background: "#C9A84C",
+                        color: "#07070F",
+                        padding: "10px 20px",
+                        fontFamily: "'Space Mono', monospace",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        textDecoration: "none"
+                      }}
+                    >
+                      Réserver mon Diagnostic Flash IA
+                    </a>
+                  </div>
+                )}
+
+                <button
+                  className="sm-outline-btn"
+                  onClick={() => copyReport(report)}
+                  style={{
+                    marginTop: 16,
+                    background: copied ? "#00D4E8" : "transparent",
+                    border: "1px solid #00D4E8",
+                    color: copied ? "#07070F" : "#00D4E8",
+                    padding: "10px 18px",
+                    fontFamily: "'Space Mono', monospace",
+                    fontSize: 12,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  {copied ? "Copié ✓" : "Copier le rapport"}
+                </button>
+              </div>
+            )}
+
+            {history.length > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#A8C1D4", marginBottom: 10 }}>
+                  Mes derniers scans
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {history.map((h, i) => {
+                    const v = verdictFromScore(h.honesty_score);
+                    return (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, borderBottom: "1px dashed rgba(168,193,212,0.15)", paddingBottom: 6 }}>
+                        <span style={{ color: "#DFD9DC" }}>{h.company_name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ color: v.color, fontWeight: 700 }}>{h.honesty_score} · {v.label}</span>
+                          <button
+                            onClick={() => deleteHistoryEntry(h)}
+                            className="sm-delete"
+                            title="Supprimer ce scan"
+                            style={{ background: "transparent", border: "none", color: "#5C1C39", cursor: "pointer", fontSize: 13, padding: "0 2px" }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* BATTLE */}
+        {mode === "battle" && (
+          <>
+            <div style={{ fontSize: 11, color: "#5C1C39", textAlign: "center", marginBottom: 14 }}>
+              Vos deux entrées sont comparées publiquement (score partagé sur le Mur de la Honte).
+            </div>
+            <div style={{ border: "1px solid rgba(201,168,76,0.35)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Concurrent A" style={inputStyle} />
+                <input value={urlB} onChange={(e) => setUrlB(e.target.value)} placeholder="Concurrent B" style={inputStyle} />
+                <button className="sm-primary-btn" onClick={runBattle} disabled={status === "loading" || !url.trim() || !urlB.trim()} style={{ background: status === "loading" ? "rgba(201,168,76,0.3)" : "#C9A84C", color: "#07070F", border: "none", padding: "12px 22px", fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase", cursor: status === "loading" ? "wait" : "pointer" }}>
+                  {status === "loading" ? "Duel en cours…" : "Lancer le duel"}
+                </button>
+              </div>
+              {progress > 0 && (
+                <div style={{ marginTop: 12, height: 3, background: "rgba(255,255,255,0.08)" }}>
+                  <div style={{ height: "100%", width: `${progress}%`, background: "#B43061", transition: "width 0.25s ease" }} />
+                </div>
+              )}
+              {status === "error" && <div style={{ marginTop: 12, fontSize: 13, color: "#B43061" }}>{errorMsg}</div>}
+            </div>
+
+            {report && reportB && (
+              <>
+                <div style={{ marginTop: 24, textAlign: "center", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 20 }}>
+                  {report.honesty_score === reportB.honesty_score
+                    ? "Match nul — les deux discours se valent."
+                    : `Vainqueur : ${report.honesty_score > reportB.honesty_score ? (report.company_name || url) : (reportB.company_name || urlB)}`}
+                </div>
+                <div style={{ display: "flex", gap: 20, marginTop: 16, flexWrap: "wrap" }}>
+                  <ReportCard report={report} label="CONCURRENT A" accent="#00D4E8" />
+                  <ReportCard report={reportB} label="CONCURRENT B" accent="#B43061" />
+                </div>
+                {report.sub_scores && reportB.sub_scores && (
+                  <div style={{ marginTop: 24, height: 300 }}>
+                    <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C", marginBottom: 8 }}>
+                      Face-à-face par axe
+                    </div>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={mergedRadarData(report.sub_scores, reportB.sub_scores)} outerRadius="70%">
+                        <PolarGrid stroke="rgba(168,193,212,0.25)" />
+                        <PolarAngleAxis dataKey="axis" tick={{ fill: "#A8C1D4", fontSize: 11 }} />
+                        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                        <Radar name="A" dataKey="A" stroke="#00D4E8" fill="#00D4E8" fillOpacity={0.2} />
+                        <Radar name="B" dataKey="B" stroke="#B43061" fill="#B43061" fillOpacity={0.2} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: "#A8C1D4" }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* MUR DE LA HONTE */}
+        {mode === "mur" && (
+          <div style={{ border: "1px solid rgba(201,168,76,0.35)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
+            <div style={{ fontSize: 11, color: "#5C1C39", marginBottom: 16 }}>
+              Classement public — alimenté par tous les scans effectués via cet outil (données visibles par tous les utilisateurs).
+            </div>
+            {wall.loading && <div style={{ fontSize: 13, color: "#A8C1D4" }}>Chargement du classement…</div>}
+            {!wall.loading && (
+              <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 260px" }}>
+                  <div style={{ fontSize: 12, letterSpacing: "0.12em", color: "#B43061", marginBottom: 10, textTransform: "uppercase" }}>
+                    Mur de la Honte
+                  </div>
+                  {wall.shame.length === 0 && <div style={{ fontSize: 12, color: "#A8C1D4" }}>Aucun scan pour l'instant.</div>}
+                  {wall.shame.map((e, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, borderBottom: "1px dashed rgba(180,48,97,0.25)", padding: "8px 0" }}>
+                      <span>{i + 1}. {e.company_name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ color: "#B43061", fontWeight: 700 }}>{e.honesty_score}</span>
+                        <button onClick={() => deleteWallEntry(e)} className="sm-delete" title="Supprimer du classement" style={{ background: "transparent", border: "none", color: "#5C1C39", cursor: "pointer", fontSize: 14, padding: "0 2px" }}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ flex: "1 1 260px" }}>
+                  <div style={{ fontSize: 12, letterSpacing: "0.12em", color: "#00D4E8", marginBottom: 10, textTransform: "uppercase" }}>
+                    Panthéon de l'Authenticité
+                  </div>
+                  {wall.pantheon.length === 0 && <div style={{ fontSize: 12, color: "#A8C1D4" }}>Aucun scan pour l'instant.</div>}
+                  {wall.pantheon.map((e, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, borderBottom: "1px dashed rgba(0,212,232,0.25)", padding: "8px 0" }}>
+                      <span>{i + 1}. {e.company_name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ color: "#00D4E8", fontWeight: 700 }}>{e.honesty_score}</span>
+                        <button onClick={() => deleteWallEntry(e)} className="sm-delete" title="Supprimer du classement" style={{ background: "transparent", border: "none", color: "#5C1C39", cursor: "pointer", fontSize: 14, padding: "0 2px" }}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: 28, fontSize: 11, color: "#5C1C39", textAlign: "center" }}>
+          Outil satirique — les scores reflètent le ton marketing détecté publiquement, pas la qualité réelle du produit.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<SaasMeter />);
+</script>
+</body>
+</html>
